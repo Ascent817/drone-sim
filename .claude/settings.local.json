@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\Users\\\\Prabha\\\\Desktop\\\\drone\")",
+      "Bash(g++ --version)",
+      "Bash(cmake --version)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --version)"
+    ]
+  }
+}
