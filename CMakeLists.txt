@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(RAYLIB_DIR "${CMAKE_SOURCE_DIR}/vendor/raylib")
 
-add_executable(drone src/main.cpp)
+add_executable(drone src/main.cpp src/render_pipeline.cpp)
 
 target_include_directories(drone PRIVATE "${RAYLIB_DIR}/include")
 target_link_directories(drone PRIVATE "${RAYLIB_DIR}/lib")
