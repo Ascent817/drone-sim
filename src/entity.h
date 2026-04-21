@@ -3,11 +3,23 @@
 #include <memory>
 #include <typeindex>
 #include <unordered_map>
+#include <vector>
 
 #include "components/component.h"
 
 class Entity {
  public:
+  Entity* AddChild() {
+    auto child = std::make_unique<Entity>();
+    child->parent = this;
+    child->id = static_cast<unsigned int>(children.size());
+    Entity* raw = child.get();
+    children.push_back(std::move(child));
+    return raw;
+  }
+
+  Entity* GetParent() const { return parent; }
+
   template <typename T, typename... Args>
   T* AddComponent(Args&&... args) {
     static_assert(std::is_base_of_v<Component, T>);
@@ -39,8 +51,20 @@ class Entity {
     for (auto& [type, comp] : components) fn(*comp);
   }
 
+  template <typename Fn>
+  void ForEachChild(Fn&& fn) {
+    for (auto& child : children) fn(*child);
+  }
+
+  template <typename Fn>
+  void ForEachChild(Fn&& fn) const {
+    for (const auto& child : children) fn(*child);
+  }
+
   unsigned int id = 0;
 
  private:
+  Entity* parent = nullptr;
+  std::vector<std::unique_ptr<Entity>> children;
   std::unordered_map<std::type_index, std::unique_ptr<Component>> components;
 };

@@ -5,7 +5,10 @@
 
 class TransformComponent : public Component {
  public:
+  // Local transform relative to parent.
   Matrix matrix = MatrixIdentity();
+  // Computed world-space transform (updated by World::Update).
+  Matrix worldMatrix = MatrixIdentity();
 
   Vector3 position() const {
     return {matrix.m12, matrix.m13, matrix.m14};
@@ -71,8 +74,32 @@ class TransformComponent : public Component {
   }
 
   void Rotate(float angle, const Vector3& axis) {
-    Matrix rot = MatrixRotate(axis, angle);
-    matrix = MatrixMultiply(matrix, rot);
+    Vector3 axisNorm = Vector3Normalize(axis);
+    if (Vector3Length(axisNorm) < 0.0001f) return;
+
+    // Keep local position fixed and rotate only the orientation basis.
+    Vector3 p = position();
+    Vector3 r = right();
+    Vector3 u = up();
+    Vector3 f = forward();
+
+    r = Vector3RotateByAxisAngle(r, axisNorm, angle);
+    u = Vector3RotateByAxisAngle(u, axisNorm, angle);
+    f = Vector3RotateByAxisAngle(f, axisNorm, angle);
+
+    matrix.m0 = r.x;
+    matrix.m1 = r.y;
+    matrix.m2 = r.z;
+
+    matrix.m4 = u.x;
+    matrix.m5 = u.y;
+    matrix.m6 = u.z;
+
+    matrix.m8 = f.x;
+    matrix.m9 = f.y;
+    matrix.m10 = f.z;
+
+    setPosition(p);
   }
 
   void setRotation(float roll, float pitch, float yaw) {

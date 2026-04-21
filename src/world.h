@@ -13,6 +13,49 @@
 struct World {
   std::vector<std::unique_ptr<Entity>> objects;
 
+  static void SyncPhysicsToTransform(Entity& entity) {
+    if (auto* pb = entity.GetComponent<PhysicsBody>()) {
+      if (auto* tc = entity.GetComponent<TransformComponent>()) {
+        tc->matrix = pb->GetTransformMatrix();
+      }
+    }
+
+    entity.ForEachChild([](Entity& child) { SyncPhysicsToTransform(child); });
+  }
+
+  static void ComputeWorldTransforms(Entity& entity, const Matrix& parentWorld) {
+    Matrix currentWorld = parentWorld;
+
+    if (auto* tc = entity.GetComponent<TransformComponent>()) {
+      tc->worldMatrix = MatrixMultiply(parentWorld, tc->matrix);
+      currentWorld = tc->worldMatrix;
+    }
+
+    entity.ForEachChild([&currentWorld](Entity& child) {
+      ComputeWorldTransforms(child, currentWorld);
+    });
+  }
+
+  static void SyncMeshFromTransform(Entity& entity) {
+    if (auto* mr = entity.GetComponent<MeshRenderer>()) {
+      if (auto* tc = entity.GetComponent<TransformComponent>()) {
+        mr->SetTransform(tc->worldMatrix);
+      }
+    }
+
+    entity.ForEachChild([](Entity& child) { SyncMeshFromTransform(child); });
+  }
+
+  static void UpdateComponentsRecursive(Entity& entity, float dt) {
+    entity.ForEachComponent([dt](Component& c) { c.Update(dt); });
+    entity.ForEachChild([dt](Entity& child) { UpdateComponentsRecursive(child, dt); });
+  }
+
+  static void DrawRecursive(Entity& entity, Shader shader) {
+    entity.ForEachComponent([shader](Component& c) { c.Draw(shader); });
+    entity.ForEachChild([shader](Entity& child) { DrawRecursive(child, shader); });
+  }
+
   Entity* CreateEntity() {
     auto e = std::make_unique<Entity>();
     e->id = static_cast<unsigned int>(objects.size());
@@ -22,28 +65,26 @@ struct World {
   }
 
   void Update(float dt) {
-    // System passes: cross-component data flow
     for (auto& e : objects) {
-      if (auto* pb = e->GetComponent<PhysicsBody>()) {
-        if (auto* tc = e->GetComponent<TransformComponent>()) {
-          tc->matrix = pb->GetTransformMatrix();
-        }
-      }
-      if (auto* mr = e->GetComponent<MeshRenderer>()) {
-        if (auto* tc = e->GetComponent<TransformComponent>()) {
-          mr->SetTransform(tc->matrix);
-        }
-      }
+      SyncPhysicsToTransform(*e);
     }
-    // Generic component update
+
     for (auto& e : objects) {
-      e->ForEachComponent([dt](Component& c) { c.Update(dt); });
+      ComputeWorldTransforms(*e, MatrixIdentity());
+    }
+
+    for (auto& e : objects) {
+      SyncMeshFromTransform(*e);
+    }
+
+    for (auto& e : objects) {
+      UpdateComponentsRecursive(*e, dt);
     }
   }
 
   void Draw(Shader shader) {
     for (auto& e : objects) {
-      e->ForEachComponent([shader](Component& c) { c.Draw(shader); });
+      DrawRecursive(*e, shader);
     }
   }
 };

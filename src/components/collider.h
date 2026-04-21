@@ -5,7 +5,9 @@
 
 class Collider : public Component {
  public:
-  enum class Type { Box, Mesh, Plane };
+  enum class Type { Box,
+                    Mesh,
+                    Plane };
 
   virtual Type GetType() const = 0;
 

@@ -1,13 +1,57 @@
 #include "scene.h"
 
+#include <array>
 #include <cmath>
 
+#include "behaviors/rotor.h"
 #include "components/collider.h"
 #include "physics_world.h"
 #include "raylib.h"
 #include "raymath.h"
 
 static constexpr float kGroundHalfThickness = 0.05f;
+static constexpr float kRotorWidth = 0.35f;
+static constexpr float kRotorThickness = 0.03f;
+static constexpr float kRotorHeightOffset = 0.05f;
+
+static void CreateDroneRotors(Entity* drone, const Vector3& halfExtents) {
+  const float x = halfExtents.x * 0.73f;
+  const float y = halfExtents.y * 1.0f + kRotorHeightOffset;
+  const float z = halfExtents.z * 0.73f;
+
+  const std::array<Vector3, 4> rotorOffsets = {
+      Vector3{x, y, z},
+      Vector3{-x, y, z},
+      Vector3{x, y, -z},
+      Vector3{-x, y, -z},
+  };
+
+  const std::array<int, 4> rotorKeys = {
+      KEY_ONE,
+      KEY_TWO,
+      KEY_THREE,
+      KEY_FOUR,
+  };
+
+  for (size_t i = 0; i < rotorOffsets.size(); i++) {
+    const Vector3& offset = rotorOffsets[i];
+    Entity* rotor = drone->AddChild();
+
+    auto* tc = rotor->AddComponent<TransformComponent>();
+    tc->setPosition(offset);
+
+    rotor->AddComponent<RotorBehavior>(tc, rotorKeys[i]);
+
+    auto* mr = rotor->AddComponent<MeshRenderer>();
+    Mesh rotorMesh = GenMeshCube(kRotorWidth * 0.25f, kRotorThickness, kRotorWidth);
+    mr->model = LoadModelFromMesh(rotorMesh);
+    mr->loaded = true;
+
+    if (mr->model.materialCount > 0) {
+      mr->model.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = DARKGRAY;
+    }
+  }
+}
 
 static Matrix ComputeNormalizeMatrix(const Model& model, float targetSpan) {
   BoundingBox bounds = GetModelBoundingBox(model);
@@ -93,6 +137,8 @@ DroneSceneResult CreateDroneEntity(World& world, PhysicsState* physics,
 
   auto* pb = e->AddComponent<PhysicsBody>();
   pb->body = droneBody;
+
+  CreateDroneRotors(e, droneHalfExtents);
 
   return {e, nullptr, nullptr, loaded};
 }
