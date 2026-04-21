@@ -51,7 +51,7 @@ Both libraries live under `vendor/` and are not fetched at build time.
 The codebase uses a lightweight ECS where all scene objects (drone, ground, camera)
 are entities in a `World::objects` vector.
 
-**Core ECS (`src/entity.h`, `src/component.h`):** `Entity` stores components in an
+**Core ECS (`src/entity.h`, `src/components/component.h`):** `Entity` stores components in an
 `unordered_map<type_index, unique_ptr<Component>>` with templated `AddComponent<T>`,
 `GetComponent<T>`, `HasComponent<T>`, `RemoveComponent<T>`. One component per type
 per entity.
@@ -60,12 +60,12 @@ per entity.
 
 | Header | Class | Purpose |
 |--------|-------|---------|
-| `transform.h` | `TransformComponent` | 4x4 matrix with position/rotation/scale helpers. **Named `TransformComponent` not `Transform`** because raylib defines its own `Transform` struct. |
-| `mesh_renderer.h` | `MeshRenderer` | Holds a raylib `Model` + normalize matrix. `Draw(Shader)` assigns the shader to all materials then calls `DrawModel`. |
-| `ground_renderer.h` | `GroundRenderer` | rlgl immediate-mode textured quad. `Draw(Shader)` wraps in `BeginShaderMode/EndShaderMode`. |
-| `collider.h` | `Collider` (abstract), `BoxCollider`, `MeshCollider`, `PlaneCollider` | Collision shape descriptions. `BoxCollider` used by drone, `PlaneCollider` by ground. |
-| `physics_body.h` | `PhysicsBody` | Non-owning pointer to `PhysicsState*`; delegates to `physics_world.h` API. |
-| `camera_controller.h` | `CameraController` | Owns `Camera3D` + yaw/pitch state. RMB mouselook, WASD+Space/Shift movement. |
+| `components/transform.h` | `TransformComponent` | 4x4 matrix with position/rotation/scale helpers. **Named `TransformComponent` not `Transform`** because raylib defines its own `Transform` struct. |
+| `components/mesh_renderer.h` | `MeshRenderer` | Holds a raylib `Model` + normalize matrix. `Draw(Shader)` assigns the shader to all materials then calls `DrawModel`. |
+| `components/ground_renderer.h` | `GroundRenderer` | rlgl immediate-mode textured quad. `Draw(Shader)` wraps in `BeginShaderMode/EndShaderMode`. |
+| `components/collider.h` | `Collider` (abstract), `BoxCollider`, `MeshCollider`, `PlaneCollider` | Collision shape descriptions. `BoxCollider` used by drone, `PlaneCollider` by ground. |
+| `components/physics_body.h` | `PhysicsBody` | Non-owning pointer to `PhysicsState*`; delegates to `physics_world.h` API. |
+| `components/camera_controller.h` | `CameraController` | Owns `Camera3D` + yaw/pitch state. RMB mouselook, WASD+Space/Shift movement. |
 
 **World (`src/world.h`):** `World::Update()` syncs physics transforms to mesh renderers
 and runs camera input. `World::Draw(Shader)` iterates entities and draws ground/mesh

@@ -3,12 +3,12 @@
 #include <memory>
 #include <vector>
 
-#include "physics_body.h"
-#include "camera_controller.h"
+#include "components/camera_controller.h"
+#include "components/ground_renderer.h"
+#include "components/mesh_renderer.h"
+#include "components/physics_body.h"
+#include "components/transform.h"
 #include "entity.h"
-#include "ground_renderer.h"
-#include "mesh_renderer.h"
-#include "transform.h"
 
 struct World {
   std::vector<std::unique_ptr<Entity>> objects;

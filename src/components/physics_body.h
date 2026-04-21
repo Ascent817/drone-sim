@@ -2,8 +2,8 @@
 
 #include <reactphysics3d/reactphysics3d.h>
 
+#include "../physics_world.h"
 #include "component.h"
-#include "physics_world.h"
 
 class PhysicsBody : public Component {
  public:

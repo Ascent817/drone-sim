@@ -1,9 +1,9 @@
-#include "physics_world.h"
 #include "scene.h"
 
 #include <cmath>
 
-#include "collider.h"
+#include "components/collider.h"
+#include "physics_world.h"
 #include "raylib.h"
 #include "raymath.h"
 

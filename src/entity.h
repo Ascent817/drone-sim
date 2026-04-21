@@ -4,7 +4,7 @@
 #include <typeindex>
 #include <unordered_map>
 
-#include "component.h"
+#include "components/component.h"
 
 class Entity {
  public:
