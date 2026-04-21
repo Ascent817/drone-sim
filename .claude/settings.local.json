@@ -4,7 +4,8 @@
       "Bash(dir \"C:\\\\Users\\\\Prabha\\\\Desktop\\\\drone\")",
       "Bash(g++ --version)",
       "Bash(cmake --version)",
-      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --version)"
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --version)",
+      "Bash(cmake --build build)"
     ]
   }
 }
