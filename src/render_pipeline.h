@@ -63,6 +63,7 @@ struct Pipeline {
 };
 
 Pipeline PipelineCreate(int renderW, int renderH, float ssaaScale);
+void PipelineResize(Pipeline& p, int renderW, int renderH, float ssaaScale);
 void PipelineDestroy(Pipeline& p);
 void PipelineSetLights(Pipeline& p, const Light* lights, int count, int sunIndex);
 void PipelineRender(Pipeline& p, Camera3D camera, DrawSceneFn drawScene, void* user);

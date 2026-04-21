@@ -4,128 +4,109 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-3D drone simulation built on raylib + C++17 with a custom deferred-style render
-pipeline (shadow mapping, SSAO, ACES tonemap, gamma, 1.5x SSAA). `src/main.cpp`
-currently wires the scene, textured ground, custom camera/input controls, and the
-drone-with-placeholder fallback. `src/render_pipeline.{h,cpp}` owns the FBOs,
-shaders, and per-frame orchestration. `src/rlights.h` is the light struct +
-uniform upload helper (adapted from raylib's `examples/shaders/rlights.h` since
-the vendored zip ships headers-only). Subsequent work (ReactPhysics3D
-integration, drone forces/controls, telemetry) builds on top of this skeleton.
+3D drone simulation built on raylib 5.5 + ReactPhysics3D 0.10.2 + C++17 with a
+custom deferred-style render pipeline (shadow mapping, SSAO, ACES tonemap, gamma,
+1.5x SSAA) and an entity-component-system architecture.
 
 ## Toolchain (Windows)
 
-The Machine PATH has been ordered so the right tools win in any fresh shell:
+- `C:\Program Files\CMake\bin` (CMake 3.25.2) — position 0 on Machine PATH.
+- `C:\ProgramData\mingw64\mingw64\bin` (MinGW-w64 GCC 15.2.0) — position 1.
+- `C:\MinGW\bin` (legacy GCC 6.3.0) — deprioritized. Do **not** link against it.
 
-- `C:\Program Files\CMake\bin` (CMake 3.25.2) - position 0 on Machine PATH.
-- `C:\ProgramData\mingw64\mingw64\bin` (MinGW-w64 GCC 15.2.0, `choco install mingw`) - position 1.
-- `C:\MinGW\bin` (legacy GCC 6.3.0 from 2016) - still present but deprioritized. Do **not**
-  link the pre-built raylib against this old toolchain; it produces libgcc/libstdc++
-  ABI errors. If a build picks it up, fix PATH order rather than working around it.
-
-Already-running shells (including bash sessions inherited from the old environment)
-won't see the change until restart. New shells are fine.
-
-**DLL load-order gotcha** (important in bash/Git-Bash shells): Git Bash's inherited
-PATH keeps `C:\MinGW\bin` ahead of the new toolchain, so when `g++.exe` spawns
-`cc1plus.exe` the Windows loader pulls the old `libstdc++-6.dll`, `libgcc_s_*.dll`,
-`libmpc-3.dll`, etc. from there first. `cc1plus.exe` then dies silently with exit 1
-and zero stderr output. Fix by prepending the new toolchain's `bin/` in the shell
-that's invoking the build:
+**DLL load-order gotcha** in bash/Git-Bash: the old `C:\MinGW\bin` can shadow the
+new toolchain's DLLs, causing silent `cc1plus.exe` exit-1 failures. Fix:
 
 ```sh
 PATH="/c/ProgramData/mingw64/mingw64/bin:$PATH" cmake --build build
 ```
 
-This is only needed inside bash shells started from the old environment. A fresh
-cmd/PowerShell (or a new bash started after the Machine PATH was fixed) picks up
-the right DLLs automatically.
-
 ## Build & run
 
-First-time configure (and any time `CMakeLists.txt` changes):
 ```sh
-cmake -S . -B build -G "MinGW Makefiles"
+cmake -S . -B build -G "MinGW Makefiles"   # first-time / CMakeLists changes
+cmake --build build                         # incremental
+./build/drone.exe                           # run
 ```
 
-Incremental build + run:
-```sh
-cmake --build build
-./build/drone.exe
-```
-
-There are no tests yet. The smoke check is: launch `drone.exe`, confirm a
-resizable HiDPI-aware window opens, a lit drone (or placeholder) casts a shadow
-onto a large textured grid floor under a horizon-gradient sky, mouselook only
-engages while the right mouse button is held, `WASD` moves horizontally,
-`Space` moves up, `Shift` moves down, and the process stays alive.
+No tests yet. Smoke check: window opens, ground renders with grid texture, drone
+(if model present) drops under gravity with shadows, RMB mouselook + WASD/Space/Shift
+camera movement all work, window is resizable.
 
 ## Architecture
 
-**Vendored raylib, not fetched.** `vendor/raylib/` contains the official pre-built
-MinGW-w64 5.5 release (`include/`, `lib/libraylib.a`). CMake links the **static**
-`libraylib.a` plus the Windows system libs raylib needs (`opengl32 gdi32 winmm`),
-so `drone.exe` runs without shipping `raylib.dll`. There is no `find_package` /
-`FetchContent` - pointing CMake at `vendor/raylib` keeps the build hermetic and
-offline. If you upgrade raylib, replace the contents of `vendor/raylib/` in place.
+### Vendored dependencies
 
-**Asset pipeline.** `assets/` at the project root is the source of truth. A
-`POST_BUILD` step in `CMakeLists.txt` copies the whole directory next to the built
-executable (`build/assets/`), so `LoadModel("assets/drone.glb")` resolves whether the
-exe is launched from the project root or from `build/`. Don't edit `build/assets/`
-- it's regenerated every build. Drop new model files into `assets/`, textures into
-`assets/textures/`, shaders into `assets/shaders/`, and rebuild.
+Both libraries live under `vendor/` and are not fetched at build time.
 
-**Model loading is fallback-driven.** `TryLoadDroneModel` in `src/main.cpp` checks
-for `assets/drone.glb` first, then `assets/drone.obj`, and reports success via
-`model.meshCount > 0` (raylib's documented signal - a failed `LoadModel` returns a
-zero-mesh `Model`, not an error code). When no model loads, `DrawPlaceholderDrone`
-renders a cube body + four rotor cubes so the scene is always usable. Any model
-work should preserve this fallback so a missing asset never crashes the app. The
-loaded drone model is normalized after load using `GetModelBoundingBox()` so the
-initial framing does not depend on authoring scale/origin inside the source GLB.
+- `vendor/raylib/` — pre-built MinGW-w64 static library (`lib/libraylib.a` + headers).
+  CMake links it plus `opengl32 gdi32 winmm`. No `raylib.dll` needed at runtime.
+- `vendor/reactphysics3d/` — source tree built via `add_subdirectory`. **Include order
+  matters:** ReactPhysics3D headers must be included before raylib headers in any
+  translation unit that uses both, because raylib's color macros (`RED`, `GREEN`, etc.)
+  corrupt RP3D's `DebugColor` enum.
 
-**Render pipeline.** `PipelineRender` runs six passes per frame against custom
-FBOs built via `rlgl.h`: (1) depth-only shadow map from the sun light into a
-2048^2 depth texture; (2) main lit geometry with 3-point Phong + 3x3 PCF shadow
-sampling into a SSAA G-buffer (color + sampleable depth) at `windowSize * 1.5`;
-(3) Crytek-style SSAO reading the G-buffer depth with normals reconstructed via
-`dFdx/dFdy`; (4-5) separable box blur (H then V) of the AO; (6) composite to
-the backbuffer applying `lit * AO`, ACES tonemap, sRGB gamma, and the
-horizon-gradient sky for background fragments (`depth >= 0.9999`). The main pass
-samples the shadow map via `materials[i].maps[MATERIAL_MAP_BRDF]` for `DrawModel`
-and via `SetShaderValueTexture` for rlgl immediate-mode primitives. Shaders live
-in `assets/shaders/` and are copied to `build/assets/` by the existing
-`POST_BUILD` step. The fullscreen post-process passes use an explicit fullscreen
-quad with UVs in `0..1`; do not switch these passes back to `DrawRectangle()`
-unless you also preserve correct texture coordinates and framebuffer sizing.
+### Entity-Component System
 
-**Adding scene geometry.** The draw callback `DrawScene(Shader, void*)` in
-`src/main.cpp` is invoked once per pass with the pass-appropriate shader. For
-raylib models, assign `materials[i].shader = shader` before `DrawModel`. For
-immediate-mode primitives, wrap in `BeginShaderMode(shader)`/`EndShaderMode`.
-The callback must not call `BeginMode3D` - the pipeline sets up matrices.
+The codebase uses a lightweight ECS where all scene objects (drone, ground, camera)
+are entities in a `World::objects` vector.
 
-**Ground rendering.** The ground is currently drawn as an immediate-mode textured
-quad in `DrawGround()` rather than a model. Texture tiling is controlled by
-`kGroundTextureTiles` in `src/main.cpp`, and the texture itself is
-`assets/textures/grid-dark.png`. If tiling changes are needed, change the UVs or
-that constant in the immediate-mode path rather than assuming mesh UV edits will
-propagate automatically.
+**Core ECS (`src/entity.h`, `src/component.h`):** `Entity` stores components in an
+`unordered_map<type_index, unique_ptr<Component>>` with templated `AddComponent<T>`,
+`GetComponent<T>`, `HasComponent<T>`, `RemoveComponent<T>`. One component per type
+per entity.
 
-**Camera/input controls.** The app does not use raylib's built-in free camera
-controls anymore. `UpdateCameraLook()` implements RMB-only mouselook (cursor
-lock while held), and `UpdateCameraMovement()` implements `WASD` planar movement
-plus `Space`/`Shift` vertical movement. If controls are changed, keep this custom
-path authoritative rather than reintroducing `UpdateCamera(..., CAMERA_FREE)`.
+**Components (all header-only):**
 
-**Physics direction.** The intended next step is integrating ReactPhysics3D as a
-thin simulation layer, not replacing rendering. Preferred rollout:
-1. Add/link the library in CMake.
-2. Create a small `physics_world.{h,cpp}` wrapper around `PhysicsCommon` and `PhysicsWorld`.
-3. Add a static ground body and a simple dynamic drone body (box collider first).
-4. Step physics with a fixed timestep.
-5. Drive render transforms from the physics body.
-6. Add drone thrust/torque controls on top.
+| Header | Class | Purpose |
+|--------|-------|---------|
+| `transform.h` | `TransformComponent` | 4x4 matrix with position/rotation/scale helpers. **Named `TransformComponent` not `Transform`** because raylib defines its own `Transform` struct. |
+| `mesh_renderer.h` | `MeshRenderer` | Holds a raylib `Model` + normalize matrix. `Draw(Shader)` assigns the shader to all materials then calls `DrawModel`. |
+| `ground_renderer.h` | `GroundRenderer` | rlgl immediate-mode textured quad. `Draw(Shader)` wraps in `BeginShaderMode/EndShaderMode`. |
+| `collider.h` | `Collider` (abstract), `BoxCollider`, `MeshCollider`, `PlaneCollider` | Collision shape descriptions. `BoxCollider` used by drone, `PlaneCollider` by ground. |
+| `physics_body.h` | `PhysicsBody` | Non-owning pointer to `PhysicsState*`; delegates to `physics_world.h` API. |
+| `camera_controller.h` | `CameraController` | Owns `Camera3D` + yaw/pitch state. RMB mouselook, WASD+Space/Shift movement. |
 
-Do not start with mesh colliders or detailed aerodynamics.
+**World (`src/world.h`):** `World::Update()` syncs physics transforms to mesh renderers
+and runs camera input. `World::Draw(Shader)` iterates entities and draws ground/mesh
+renderers. The `DrawScene` callback in `main.cpp` just calls `world->Draw(shader)`.
+
+### Render pipeline
+
+`src/render_pipeline.{h,cpp}` owns all FBOs, shaders, and per-frame orchestration.
+`PipelineRender` runs six passes: (1) shadow depth map 2048x2048; (2) lit geometry
+into SSAA G-buffer at 1.5x window size; (3) SSAO from G-buffer depth; (4-5) separable
+blur of AO; (6) composite (lit × AO + ACES tonemap + sRGB gamma + sky gradient).
+
+The `DrawScene(Shader, void*)` callback is invoked **twice per frame** — once with
+the shadow depth shader, once with the lighting shader. All renderable components
+must draw identical geometry in both calls. For models, assign
+`materials[i].shader = shader` before `DrawModel`. For immediate-mode geometry,
+wrap in `BeginShaderMode(shader)/EndShaderMode()`. The callback must not call
+`BeginMode3D` — the pipeline sets up view/projection matrices.
+
+### Physics
+
+`src/physics_world.{h,cpp}` wraps ReactPhysics3D behind an opaque `PhysicsState*`.
+Creates a static ground body and a dynamic drone body (box collider). Uses fixed
+60 Hz timestep with accumulator. `PhysicsGetDroneTransformMatrix()` returns a raylib
+`Matrix` that `World::Update()` feeds into `MeshRenderer::SetTransform()`.
+
+### Asset pipeline
+
+`assets/` at project root is source of truth. A `POST_BUILD` CMake step copies it
+to `build/assets/`. Drop models into `assets/`, textures into `assets/textures/`,
+shaders into `assets/shaders/`. Never edit `build/assets/` directly.
+
+Drone model loading: checks `assets/drone.glb` then `assets/drone.obj`. If neither
+exists, the drone entity simply has no `MeshRenderer` — no placeholder is drawn.
+The loaded model is auto-normalized to `kTargetDroneSpan` (2.0) via bounding box.
+
+### Key constraints
+
+- Do not use raylib's built-in camera controls (`UpdateCamera(..., CAMERA_FREE)`).
+  `CameraController` is authoritative.
+- Fullscreen post-process passes use an explicit fullscreen quad with UVs in `0..1`.
+  Do not switch to `DrawRectangle()` without preserving texture coordinates.
+- Ground rendering uses rlgl immediate-mode, not a model. Tiling is controlled by
+  `GroundRenderer::textureTiles`.

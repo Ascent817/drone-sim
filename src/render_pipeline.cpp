@@ -45,6 +45,56 @@ void DrawFullscreenQuad(int drawW, int drawH) {
     rlSetTexture(0);
 }
 
+void CreateResolutionFBOs(Pipeline& p) {
+    auto makeColorOnlyFbo = [&](unsigned int& fboOut, unsigned int& texOut) {
+        fboOut = rlLoadFramebuffer();
+        rlEnableFramebuffer(fboOut);
+        texOut = rlLoadTexture(nullptr, p.renderW, p.renderH,
+                               RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        rlTextureParameters(texOut, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_LINEAR);
+        rlTextureParameters(texOut, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_LINEAR);
+        rlTextureParameters(texOut, RL_TEXTURE_WRAP_S, RL_TEXTURE_WRAP_CLAMP);
+        rlTextureParameters(texOut, RL_TEXTURE_WRAP_T, RL_TEXTURE_WRAP_CLAMP);
+        rlFramebufferAttach(fboOut, texOut,
+                            RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        if (!rlFramebufferComplete(fboOut)) TraceLog(LOG_WARNING, "AO FBO incomplete");
+        rlDisableFramebuffer();
+    };
+
+    p.gFbo = rlLoadFramebuffer();
+    rlEnableFramebuffer(p.gFbo);
+    p.gColorTex = rlLoadTexture(nullptr, p.renderW, p.renderH,
+                                RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+    rlTextureParameters(p.gColorTex, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_LINEAR);
+    rlTextureParameters(p.gColorTex, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_LINEAR);
+    rlTextureParameters(p.gColorTex, RL_TEXTURE_WRAP_S, RL_TEXTURE_WRAP_CLAMP);
+    rlTextureParameters(p.gColorTex, RL_TEXTURE_WRAP_T, RL_TEXTURE_WRAP_CLAMP);
+    p.gDepthTex = rlLoadTextureDepth(p.renderW, p.renderH, false);
+    rlTextureParameters(p.gDepthTex, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_NEAREST);
+    rlTextureParameters(p.gDepthTex, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_NEAREST);
+    rlTextureParameters(p.gDepthTex, RL_TEXTURE_WRAP_S, RL_TEXTURE_WRAP_CLAMP);
+    rlTextureParameters(p.gDepthTex, RL_TEXTURE_WRAP_T, RL_TEXTURE_WRAP_CLAMP);
+    rlFramebufferAttach(p.gFbo, p.gColorTex,
+                        RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+    rlFramebufferAttach(p.gFbo, p.gDepthTex,
+                        RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+    if (!rlFramebufferComplete(p.gFbo)) TraceLog(LOG_WARNING, "G-buffer FBO incomplete");
+    rlDisableFramebuffer();
+
+    makeColorOnlyFbo(p.aoFbo, p.aoColorTex);
+    makeColorOnlyFbo(p.aoBlurFbo, p.aoBlurTex);
+}
+
+void DestroyResolutionFBOs(Pipeline& p) {
+    rlUnloadTexture(p.gColorTex);
+    rlUnloadTexture(p.gDepthTex);
+    rlUnloadTexture(p.aoColorTex);
+    rlUnloadTexture(p.aoBlurTex);
+    rlUnloadFramebuffer(p.gFbo);
+    rlUnloadFramebuffer(p.aoFbo);
+    rlUnloadFramebuffer(p.aoBlurFbo);
+}
+
 }  // namespace
 
 Pipeline PipelineCreate(int renderW, int renderH, float ssaaScale) {
@@ -107,46 +157,7 @@ Pipeline PipelineCreate(int renderW, int renderH, float ssaaScale) {
     }
     rlDisableFramebuffer();
 
-    p.gFbo = rlLoadFramebuffer();
-    rlEnableFramebuffer(p.gFbo);
-    p.gColorTex = rlLoadTexture(nullptr, p.renderW, p.renderH,
-                                RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-    rlTextureParameters(p.gColorTex, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_LINEAR);
-    rlTextureParameters(p.gColorTex, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_LINEAR);
-    rlTextureParameters(p.gColorTex, RL_TEXTURE_WRAP_S, RL_TEXTURE_WRAP_CLAMP);
-    rlTextureParameters(p.gColorTex, RL_TEXTURE_WRAP_T, RL_TEXTURE_WRAP_CLAMP);
-    p.gDepthTex = rlLoadTextureDepth(p.renderW, p.renderH, false);
-    rlTextureParameters(p.gDepthTex, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_NEAREST);
-    rlTextureParameters(p.gDepthTex, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_NEAREST);
-    rlTextureParameters(p.gDepthTex, RL_TEXTURE_WRAP_S, RL_TEXTURE_WRAP_CLAMP);
-    rlTextureParameters(p.gDepthTex, RL_TEXTURE_WRAP_T, RL_TEXTURE_WRAP_CLAMP);
-    rlFramebufferAttach(p.gFbo, p.gColorTex,
-                        RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-    rlFramebufferAttach(p.gFbo, p.gDepthTex,
-                        RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-    if (!rlFramebufferComplete(p.gFbo)) {
-        TraceLog(LOG_WARNING, "G-buffer FBO incomplete");
-    }
-    rlDisableFramebuffer();
-
-    auto makeColorOnlyFbo = [&](unsigned int& fboOut, unsigned int& texOut) {
-        fboOut = rlLoadFramebuffer();
-        rlEnableFramebuffer(fboOut);
-        texOut = rlLoadTexture(nullptr, p.renderW, p.renderH,
-                               RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-        rlTextureParameters(texOut, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_LINEAR);
-        rlTextureParameters(texOut, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_LINEAR);
-        rlTextureParameters(texOut, RL_TEXTURE_WRAP_S, RL_TEXTURE_WRAP_CLAMP);
-        rlTextureParameters(texOut, RL_TEXTURE_WRAP_T, RL_TEXTURE_WRAP_CLAMP);
-        rlFramebufferAttach(fboOut, texOut,
-                            RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-        if (!rlFramebufferComplete(fboOut)) {
-            TraceLog(LOG_WARNING, "AO FBO incomplete");
-        }
-        rlDisableFramebuffer();
-    };
-    makeColorOnlyFbo(p.aoFbo, p.aoColorTex);
-    makeColorOnlyFbo(p.aoBlurFbo, p.aoBlurTex);
+    CreateResolutionFBOs(p);
 
     std::mt19937 rng(42);
     float kernel[16 * 3];
@@ -199,7 +210,21 @@ Pipeline PipelineCreate(int renderW, int renderH, float ssaaScale) {
     return p;
 }
 
+void PipelineResize(Pipeline& p, int renderW, int renderH, float ssaaScale) {
+    DestroyResolutionFBOs(p);
+    p.baseRenderW = renderW;
+    p.baseRenderH = renderH;
+    p.renderW = (int)std::lround((double)renderW * ssaaScale);
+    p.renderH = (int)std::lround((double)renderH * ssaaScale);
+    CreateResolutionFBOs(p);
+    float noiseScale[2] = {(float)p.renderW / 4.0f, (float)p.renderH / 4.0f};
+    SetShaderValue(p.ssao, p.ssaoNoiseScaleLoc, noiseScale, SHADER_UNIFORM_VEC2);
+    float texel[2] = {1.0f / (float)p.renderW, 1.0f / (float)p.renderH};
+    SetShaderValue(p.blur, p.blurTexelLoc, texel, SHADER_UNIFORM_VEC2);
+}
+
 void PipelineDestroy(Pipeline& p) {
+    DestroyResolutionFBOs(p);
     UnloadShader(p.lighting);
     UnloadShader(p.shadowDepth);
     UnloadShader(p.ssao);
@@ -207,14 +232,7 @@ void PipelineDestroy(Pipeline& p) {
     UnloadShader(p.composite);
     UnloadTexture(p.noiseTex);
     rlUnloadTexture(p.shadowDepthTex);
-    rlUnloadTexture(p.gColorTex);
-    rlUnloadTexture(p.gDepthTex);
-    rlUnloadTexture(p.aoColorTex);
-    rlUnloadTexture(p.aoBlurTex);
     rlUnloadFramebuffer(p.shadowFbo);
-    rlUnloadFramebuffer(p.gFbo);
-    rlUnloadFramebuffer(p.aoFbo);
-    rlUnloadFramebuffer(p.aoBlurFbo);
 }
 
 void PipelineSetLights(Pipeline& p, const Light* lights, int count, int sunIndex) {
