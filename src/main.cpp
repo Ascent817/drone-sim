@@ -1,6 +1,7 @@
+#include "entities/camera.h"
+#include "entities/drone.h"
+#include "entities/groundplane.h"
 #include "physics_world.h"
-#include "scene.h"
-
 #include "raylib.h"
 #include "render_pipeline.h"
 #include "rlights.h"
@@ -35,7 +36,7 @@ int main() {
   SetTraceLogLevel(LOG_WARNING);
   SetConfigFlags(FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_RESIZABLE);
   InitWindow(kScreenW, kScreenH, "Drone Sim");
-  SetTargetFPS(200);
+  SetTargetFPS(500);
 
   int renderW = GetRenderWidth();
   int renderH = GetRenderHeight();
@@ -48,9 +49,9 @@ int main() {
   PhysicsState* physics = PhysicsInit();
   World world;
 
-  CreateGroundEntity(world, physics, kGroundTexturePath, kGroundSize, kGroundTextureTiles);
-  DroneSceneResult drone = CreateDroneEntity(world, physics, kModelGlb, kModelObj,
-                                             kTargetDroneSpan, kDroneFloorY, 1.0f);
+  CreateGroundPlaneEntity(world, physics, kGroundTexturePath, kGroundSize, kGroundTextureTiles);
+  DroneEntityResult drone = CreateDroneEntity(world, physics, kModelGlb, kModelObj,
+                                              kTargetDroneSpan, kDroneFloorY, 1.0f);
   Entity* cameraEntity = CreateCameraEntity(world, {8.0f, 6.0f, 8.0f}, {0.0f, 1.0f, 0.0f});
   auto* cc = cameraEntity->GetComponent<CameraController>();
 
@@ -71,7 +72,7 @@ int main() {
     PipelineRender(pipeline, cc->camera, DrawScene, &world);
 
     DrawFPS(10, 10);
-    if (!drone.droneModelLoaded) {
+    if (!drone.modelLoaded) {
       DrawText("Drop drone.glb (or .obj) into assets/ and rebuild.",
                10, GetScreenHeight() - 30, 18, DARKGRAY);
     }

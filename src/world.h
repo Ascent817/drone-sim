@@ -13,6 +13,15 @@
 struct World {
   std::vector<std::unique_ptr<Entity>> objects;
 
+  static void StartComponentsRecursive(Entity& entity) {
+    entity.ForEachComponent([](Component& c) {
+      if (c.started) return;
+      c.Start();
+      c.started = true;
+    });
+    entity.ForEachChild([](Entity& child) { StartComponentsRecursive(child); });
+  }
+
   static void SyncPhysicsToTransform(Entity& entity) {
     if (auto* pb = entity.GetComponent<PhysicsBody>()) {
       if (auto* tc = entity.GetComponent<TransformComponent>()) {
@@ -27,7 +36,8 @@ struct World {
     Matrix currentWorld = parentWorld;
 
     if (auto* tc = entity.GetComponent<TransformComponent>()) {
-      tc->worldMatrix = MatrixMultiply(parentWorld, tc->matrix);
+      // Compose local with parent in the same order used by render transforms.
+      tc->worldMatrix = MatrixMultiply(tc->matrix, parentWorld);
       currentWorld = tc->worldMatrix;
     }
 
@@ -66,7 +76,15 @@ struct World {
 
   void Update(float dt) {
     for (auto& e : objects) {
+      StartComponentsRecursive(*e);
+    }
+
+    for (auto& e : objects) {
       SyncPhysicsToTransform(*e);
+    }
+
+    for (auto& e : objects) {
+      UpdateComponentsRecursive(*e, dt);
     }
 
     for (auto& e : objects) {
@@ -75,10 +93,6 @@ struct World {
 
     for (auto& e : objects) {
       SyncMeshFromTransform(*e);
-    }
-
-    for (auto& e : objects) {
-      UpdateComponentsRecursive(*e, dt);
     }
   }
 

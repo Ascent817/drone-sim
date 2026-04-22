@@ -13,10 +13,14 @@ class CameraController : public Component {
   float pitch = 0.0f;
   bool rotating = false;
 
-  ~CameraController() { if (rotating) EnableCursor(); }
+  ~CameraController() {
+    if (rotating) EnableCursor();
+  }
 
   static constexpr float kLookSensitivity = 0.0035f;
   static constexpr float kMoveSpeed = 6.0f;
+
+  void Start() override { InitFromCamera(); }
 
   void InitFromCamera() {
     Vector3 forward =
@@ -79,11 +83,6 @@ class CameraController : public Component {
   }
 
   void Update(float /*dt*/) override {
-    UpdateMovement();
-    UpdateLook();
-  }
-
-  void Update() {
     UpdateMovement();
     UpdateLook();
   }

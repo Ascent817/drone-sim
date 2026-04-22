@@ -1,20 +1,19 @@
-#include "scene.h"
+#include "drone.h"
 
 #include <array>
 #include <cmath>
 
-#include "behaviors/rotor.h"
-#include "components/collider.h"
-#include "physics_world.h"
+#include "../behaviors/rotor.h"
+#include "../components/collider.h"
 #include "raylib.h"
 #include "raymath.h"
 
-static constexpr float kGroundHalfThickness = 0.05f;
-static constexpr float kRotorWidth = 0.35f;
-static constexpr float kRotorThickness = 0.03f;
-static constexpr float kRotorHeightOffset = 0.05f;
+namespace {
+constexpr float kRotorWidth = 0.35f;
+constexpr float kRotorThickness = 0.03f;
+constexpr float kRotorHeightOffset = 0.05f;
 
-static void CreateDroneRotors(Entity* drone, const Vector3& halfExtents) {
+void CreateDroneRotors(Entity* drone, const Vector3& halfExtents) {
   const float x = halfExtents.x * 0.73f;
   const float y = halfExtents.y * 1.0f + kRotorHeightOffset;
   const float z = halfExtents.z * 0.73f;
@@ -37,10 +36,10 @@ static void CreateDroneRotors(Entity* drone, const Vector3& halfExtents) {
     const Vector3& offset = rotorOffsets[i];
     Entity* rotor = drone->AddChild();
 
-    auto* tc = rotor->AddComponent<TransformComponent>();
+    auto* tc = rotor->GetComponent<TransformComponent>();
     tc->setPosition(offset);
 
-    rotor->AddComponent<RotorBehavior>(tc, rotorKeys[i]);
+    rotor->AddComponent<RotorBehavior>(rotorKeys[i]);
 
     auto* mr = rotor->AddComponent<MeshRenderer>();
     Mesh rotorMesh = GenMeshCube(kRotorWidth * 0.25f, kRotorThickness, kRotorWidth);
@@ -53,7 +52,7 @@ static void CreateDroneRotors(Entity* drone, const Vector3& halfExtents) {
   }
 }
 
-static Matrix ComputeNormalizeMatrix(const Model& model, float targetSpan) {
+Matrix ComputeNormalizeMatrix(const Model& model, float targetSpan) {
   BoundingBox bounds = GetModelBoundingBox(model);
   Vector3 size = Vector3Subtract(bounds.max, bounds.min);
   float largestDim = fmaxf(size.x, fmaxf(size.y, size.z));
@@ -68,37 +67,12 @@ static Matrix ComputeNormalizeMatrix(const Model& model, float targetSpan) {
   return MatrixMultiply(MatrixScale(scale, scale, scale),
                         MatrixTranslate(translation.x, translation.y, translation.z));
 }
+}  // namespace
 
-Entity* CreateGroundEntity(World& world, PhysicsState* physics,
-                           const char* texturePath, float size,
-                           float textureTiles) {
+DroneEntityResult CreateDroneEntity(World& world, PhysicsState* physics,
+                                    const char* glbPath, const char* objPath,
+                                    float targetSpan, float startY, float mass) {
   Entity* e = world.CreateEntity();
-  e->AddComponent<TransformComponent>();
-
-  auto* gc = e->AddComponent<PlaneCollider>();
-  gc->normal = {0.0f, 1.0f, 0.0f};
-  gc->distance = 0.0f;
-
-  auto* gr = e->AddComponent<GroundRenderer>();
-  gr->texture = LoadTexture(texturePath);
-  SetTextureWrap(gr->texture, TEXTURE_WRAP_REPEAT);
-  SetTextureFilter(gr->texture, TEXTURE_FILTER_BILINEAR);
-  gr->size = size;
-  gr->textureTiles = textureTiles;
-
-  auto* groundShape = PhysicsCreateBoxShape(
-      physics, rp3d::Vector3(size / 2.0f, kGroundHalfThickness, size / 2.0f));
-  PhysicsCreateStaticBody(physics, rp3d::Vector3(0.0f, -kGroundHalfThickness, 0.0f),
-                          groundShape, rp3d::Transform::identity());
-
-  return e;
-}
-
-DroneSceneResult CreateDroneEntity(World& world, PhysicsState* physics,
-                                   const char* glbPath, const char* objPath,
-                                   float targetSpan, float startY, float mass) {
-  Entity* e = world.CreateEntity();
-  e->AddComponent<TransformComponent>();
 
   Vector3 droneHalfExtents = {0.5f, 0.175f, 0.5f};
   bool loaded = false;
@@ -140,20 +114,5 @@ DroneSceneResult CreateDroneEntity(World& world, PhysicsState* physics,
 
   CreateDroneRotors(e, droneHalfExtents);
 
-  return {e, nullptr, nullptr, loaded};
-}
-
-Entity* CreateCameraEntity(World& world, Vector3 position, Vector3 target) {
-  Entity* e = world.CreateEntity();
-  e->AddComponent<TransformComponent>();
-
-  auto* cc = e->AddComponent<CameraController>();
-  cc->camera.position = position;
-  cc->camera.target = target;
-  cc->camera.up = {0.0f, 1.0f, 0.0f};
-  cc->camera.fovy = 45.0f;
-  cc->camera.projection = CAMERA_PERSPECTIVE;
-  cc->InitFromCamera();
-
-  return e;
+  return {e, loaded};
 }

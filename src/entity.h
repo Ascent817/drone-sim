@@ -1,14 +1,18 @@
 #pragma once
 
 #include <memory>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
 
 #include "components/component.h"
+#include "components/transform.h"
 
 class Entity {
  public:
+  Entity() { AddComponent<TransformComponent>(); }
+
   Entity* AddChild() {
     auto child = std::make_unique<Entity>();
     child->parent = this;
@@ -23,8 +27,17 @@ class Entity {
   template <typename T, typename... Args>
   T* AddComponent(Args&&... args) {
     static_assert(std::is_base_of_v<Component, T>);
+
+    auto key = std::type_index(typeid(T));
+    auto it = components.find(key);
+    if (it != components.end()) {
+      return static_cast<T*>(it->second.get());
+    }
+
     T* raw = new T(std::forward<Args>(args)...);
-    components[std::type_index(typeid(T))] =
+    raw->entity = this;
+    raw->id = nextComponentId++;
+    components[key] =
         std::unique_ptr<Component>(static_cast<Component*>(raw));
     return raw;
   }
@@ -43,6 +56,7 @@ class Entity {
 
   template <typename T>
   void RemoveComponent() {
+    if constexpr (std::is_same_v<T, TransformComponent>) return;
     components.erase(std::type_index(typeid(T)));
   }
 
@@ -65,6 +79,7 @@ class Entity {
 
  private:
   Entity* parent = nullptr;
+  unsigned int nextComponentId = 0;
   std::vector<std::unique_ptr<Entity>> children;
   std::unordered_map<std::type_index, std::unique_ptr<Component>> components;
 };
