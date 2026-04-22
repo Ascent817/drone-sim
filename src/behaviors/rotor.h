@@ -10,7 +10,7 @@
 class RotorBehavior : public Component {
  public:
   RotorBehavior(int activationKey, float spinSpeedRadPerSec = 40.0f,
-                float thrustPerRadPerSec = 0.12f)
+                float thrustPerRadPerSec = 0.05f)
       : activationKey(activationKey),
         spinSpeed(spinSpeedRadPerSec),
         thrustPerSpeed(thrustPerRadPerSec) {}

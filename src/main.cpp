@@ -19,6 +19,11 @@ static constexpr float kDroneFloorY = 0.75f;
 static constexpr float kGroundSize = 100.0f;
 static constexpr float kGroundTextureTiles = 10.0f;
 
+enum class ActiveCameraMode {
+  Free,
+  Drone,
+};
+
 static void ConfigureLights(Light (&lights)[3], Shader shader) {
   lights[0] = CreateLight(0, LIGHT_DIRECTIONAL, {6.0f, 12.0f, 6.0f}, {0.0f, 0.0f, 0.0f},
                           Color{255, 240, 210, 255}, shader);
@@ -53,12 +58,18 @@ int main() {
   DroneEntityResult drone = CreateDroneEntity(world, physics, kModelGlb, kModelObj,
                                               kTargetDroneSpan, kDroneFloorY, 1.0f);
   Entity* cameraEntity = CreateCameraEntity(world, {8.0f, 6.0f, 8.0f}, {0.0f, 1.0f, 0.0f});
+  Entity* droneCameraEntity =
+      CreateDroneCameraEntity(drone.drone, {0.0f, 0.9f, -2.5f});
   auto* cc = cameraEntity->GetComponent<CameraController>();
+  ActiveCameraMode activeCameraMode = ActiveCameraMode::Free;
 
   while (!WindowShouldClose()) {
     float dt = GetFrameTime();
     PhysicsStep(physics, dt);
     world.Update(dt);
+
+    if (IsKeyPressed(KEY_F1)) activeCameraMode = ActiveCameraMode::Free;
+    if (IsKeyPressed(KEY_F2)) activeCameraMode = ActiveCameraMode::Drone;
 
     if (renderW != GetRenderWidth() || renderH != GetRenderHeight()) {
       renderW = GetRenderWidth();
@@ -69,9 +80,15 @@ int main() {
     BeginDrawing();
     ClearBackground(BLACK);
 
-    PipelineRender(pipeline, cc->camera, DrawScene, &world);
+    Camera3D activeCamera = cc->camera;
+    if (activeCameraMode == ActiveCameraMode::Drone) {
+      activeCamera = BuildCameraFromEntityTransform(droneCameraEntity, 75.0f);
+    }
+
+    PipelineRender(pipeline, activeCamera, DrawScene, &world);
 
     DrawFPS(10, 10);
+    DrawText("F1: Freecam  F2: Dronecam", 10, 34, 18, LIGHTGRAY);
     if (!drone.modelLoaded) {
       DrawText("Drop drone.glb (or .obj) into assets/ and rebuild.",
                10, GetScreenHeight() - 30, 18, DARKGRAY);
